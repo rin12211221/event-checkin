@@ -35,7 +35,9 @@ function feedback(success: boolean) {
     gain.connect(ctx.destination);
     oscillator.start();
     oscillator.stop(ctx.currentTime + 0.1);
-  } catch {}
+  } catch {
+    // Audio feedback is optional; vibration and visual feedback still work.
+  }
 }
 
 export function Scanner({ eventId }: { eventId: string }) {
@@ -73,7 +75,9 @@ export function Scanner({ eventId }: { eventId: string }) {
           busyRef.current = true;
           try {
             instance.pause(true);
-          } catch {}
+          } catch {
+            // A duplicate frame may arrive while the scanner is transitioning to paused state.
+          }
           try {
             const response = await checkInToken(eventId, decodedText);
             if (!response.ok) {
@@ -105,7 +109,9 @@ export function Scanner({ eventId }: { eventId: string }) {
             busyRef.current = false;
             try {
               instance.resume();
-            } catch {}
+            } catch {
+              // The scanner may have been closed before the timeout fires.
+            }
           }, 1300);
         },
         () => {}
@@ -164,7 +170,11 @@ export function Scanner({ eventId }: { eventId: string }) {
       </section>
 
       <section className="manual-panel">
-        <button className="manual-toggle" onClick={() => setManualOpen((value) => !value)}>
+        <button
+          type="button"
+          className="manual-toggle"
+          onClick={() => setManualOpen((value) => !value)}
+        >
           <Search size={18} /> Can&apos;t scan? Search attendee
         </button>
         {manualOpen ? (
@@ -178,13 +188,23 @@ export function Scanner({ eventId }: { eventId: string }) {
                 }}
                 placeholder="Name or phone"
               />
-              <button className="button button-secondary" onClick={searchManual} disabled={pending}>
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={searchManual}
+                disabled={pending}
+              >
                 Search
               </button>
             </div>
             <div className="manual-results">
               {matches.map((row) => (
-                <button key={row.id} onClick={() => manualCheckIn(row)} disabled={pending}>
+                <button
+                  type="button"
+                  key={row.id}
+                  onClick={() => manualCheckIn(row)}
+                  disabled={pending}
+                >
                   <div>
                     <strong>{row.name}</strong>
                     <span>
