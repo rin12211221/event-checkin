@@ -88,12 +88,16 @@ export async function registerForEvent(input: {
   });
 
   if (error?.code === "23505") {
-    const { data: duplicate } = await db
+    const { data: duplicate, error: duplicateError } = await db
       .from("registrations")
       .select("checkin_token")
       .eq("event_id", event.id)
       .eq("phone", phone)
-      .single();
+      .maybeSingle();
+    if (duplicateError) throw duplicateError;
+    if (!duplicate) {
+      return { ok: false, error: "Registration already exists. Please try again." };
+    }
     return { ok: true, token: duplicate.checkin_token as string, duplicate: true };
   }
   if (error) throw error;
@@ -127,6 +131,7 @@ export async function createEvent(input: {
     .select("id")
     .single();
   if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Could not create event." };
   revalidatePath("/admin");
   return { ok: true, id: data.id as string };
 }
