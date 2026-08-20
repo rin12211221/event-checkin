@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type EventRecord = {
   id: string;
@@ -34,9 +34,9 @@ export type RegistrationRecord = {
   club?: { name: string; slug: string } | null;
 };
 
-let client: ReturnType<typeof createClient> | null = null;
+let client: SupabaseClient | null = null;
 
-export function getDb() {
+export function getDb(): SupabaseClient {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
