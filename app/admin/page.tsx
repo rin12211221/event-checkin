@@ -201,7 +201,7 @@ export default async function AdminPage({
             )}
           </div>
           <p className="campaign-note">
-            Registration data below comes from Upswell's existing ambassador/referee
+            Registration data below comes from Upswell’s existing ambassador/referee
             records. QR attendance will be connected to the same campaign next.
           </p>
         </div>
@@ -212,7 +212,7 @@ export default async function AdminPage({
           <div>
             <h2>Student registrations</h2>
             <p>
-              Students who joined through one of this campaign's ambassador links.
+              Students who joined through one of this campaign’s ambassador links.
             </p>
           </div>
         </div>
