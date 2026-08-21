@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./campaign.css";
 
 export const metadata: Metadata = {
   title: "Upswell Event Check-in",
