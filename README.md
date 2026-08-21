@@ -39,12 +39,10 @@ npm install
 ```bash
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
-ADMIN_PIN=...
-ADMIN_COOKIE_SECRET=...
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-`ADMIN_COOKIE_SECRET` should be a long random string. Never expose the Supabase service-role key in browser code.
+Never expose the Supabase service-role key in browser code.
 
 5. Start the app:
 
@@ -52,7 +50,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 npm run dev
 ```
 
-6. Open `/admin`, create an event, add clubs, and copy each club's registration link.
+6. Open `/admin` directly, create an event, add clubs, and copy each club's registration link. There is no staff PIN or login screen.
 
 ## Event-day flow
 
@@ -64,4 +62,4 @@ npm run dev
 
 ## Privacy / security
 
-Phone numbers are operational event data. Do not commit exports, Supabase keys, or attendee data to GitHub. The repository can be public without exposing runtime secrets, but an internal Upswell tool is safer as a private repository.
+Phone numbers are operational event data. Do not commit exports, Supabase keys, or attendee data to GitHub. Because the admin area is intentionally passwordless, restrict deployment access appropriately if the dashboard should not be public.
