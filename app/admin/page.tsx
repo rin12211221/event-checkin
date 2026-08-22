@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ExternalLink, RefreshCw, Users } from "lucide-react";
+import { ExternalLink, RefreshCw, Send, Users } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
 import {
   ambassadorInviteUrl,
@@ -75,6 +75,13 @@ export default async function AdminPage({
     `${campaign.venue_address.state} ${campaign.venue_address.zip_code}`,
   ].join(", ");
 
+  const bulkVoucherLinks = ambassadors
+    .map((ambassador) => {
+      const url = ambassadorInviteUrl(ambassador.ambassador_code);
+      return `${ambassador.public_name}\n${url}`;
+    })
+    .join("\n\n");
+
   return (
     <main className="admin-shell wide">
       <header className="admin-header campaign-admin-header">
@@ -120,6 +127,62 @@ export default async function AdminPage({
         </form>
       </section>
 
+      <section className="panel voucher-share-panel">
+        <div className="voucher-share-heading">
+          <div className="panel-title">
+            <Send size={19} />
+            <div>
+              <h2>Voucher application links</h2>
+              <p>
+                Send each club its own tracked link. Students who apply through it
+                will appear in the registration list below.
+              </p>
+            </div>
+          </div>
+          {ambassadors.length > 0 ? (
+            <CopyButton value={bulkVoucherLinks} label="Copy all links" />
+          ) : null}
+        </div>
+
+        <div className="campaign-link-list">
+          {ambassadors.length === 0 ? (
+            <div className="empty-state">
+              No club / ambassador links exist yet. Add each club representative to
+              this campaign in Upswell Admin first; their tracked voucher link will
+              appear here automatically.
+            </div>
+          ) : (
+            ambassadors.map((ambassador) => {
+              const url = ambassadorInviteUrl(ambassador.ambassador_code);
+              const shareMessage = `Claim your ${campaign.venue_name} event voucher with Upswell:\n${url}\n\nPlease use this club-specific link so your registration is tracked correctly.`;
+
+              return (
+                <div className="campaign-link-row voucher-link-row" key={ambassador.id}>
+                  <div>
+                    <strong>{ambassador.public_name}</strong>
+                    <span>
+                      {ambassador.ambassador_code} · {ambassador.total_invites} registered
+                    </span>
+                    <code>{url}</code>
+                  </div>
+                  <div className="campaign-link-actions">
+                    <CopyButton value={url} label="Copy link" />
+                    <CopyButton value={shareMessage} label="Copy message" />
+                    <Link
+                      href={url}
+                      target="_blank"
+                      className="button button-ghost button-small"
+                    >
+                      Open <ExternalLink size={15} />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </section>
+
       <section className="stat-grid">
         <div className="stat-card">
           <span>Club / ambassador links</span>
@@ -144,45 +207,18 @@ export default async function AdminPage({
           <div className="panel-title">
             <Users size={19} />
             <div>
-              <h2>Club invitation links</h2>
+              <h2>How tracking works</h2>
               <p>
-                Each ambassador code is already tracked by the existing Upswell
-                invitation flow.
+                Each club link uses its existing Upswell ambassador code, so new
+                voucher applications stay attributed to that club.
               </p>
             </div>
           </div>
-          <div className="campaign-link-list">
-            {ambassadors.length === 0 ? (
-              <div className="empty-state">
-                No ambassadors have been added to this campaign yet. Add the club
-                contacts in Upswell Admin first.
-              </div>
-            ) : (
-              ambassadors.map((ambassador) => {
-                const url = ambassadorInviteUrl(ambassador.ambassador_code);
-                return (
-                  <div className="campaign-link-row" key={ambassador.id}>
-                    <div>
-                      <strong>{ambassador.public_name}</strong>
-                      <span>
-                        {ambassador.ambassador_code} · {ambassador.total_invites} registered
-                      </span>
-                    </div>
-                    <div className="campaign-link-actions">
-                      <CopyButton value={url} label="Copy link" />
-                      <Link
-                        href={url}
-                        target="_blank"
-                        className="button button-ghost button-small"
-                      >
-                        Open <ExternalLink size={15} />
-                      </Link>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+          <p className="campaign-note neutral-note">
+            Use the links above for students. The general Event RSVP page is for the
+            campaign flow itself and should not replace a club-specific voucher link
+            when you want club attribution.
+          </p>
         </div>
 
         <div className="panel campaign-event-panel">
