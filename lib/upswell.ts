@@ -21,14 +21,12 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
     );
   }
 
-  const payload = (await response.json()) as T | { data?: T };
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "data" in payload &&
-    (payload as { data?: T }).data !== undefined
-  ) {
-    return (payload as { data: T }).data;
+  const payload = (await response.json()) as
+    | T
+    | { data?: T; result?: T };
+  if (payload && typeof payload === "object") {
+    if ("data" in payload && payload.data !== undefined) return payload.data;
+    if ("result" in payload && payload.result !== undefined) return payload.result;
   }
   return payload as T;
 }
@@ -37,6 +35,19 @@ async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${backendUrl()}${path}`, {
     cache: "no-store",
     headers: { Accept: "application/json" },
+  });
+  return parseApiResponse<T>(response);
+}
+
+async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${backendUrl()}${path}`, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
   });
   return parseApiResponse<T>(response);
 }
@@ -116,7 +127,27 @@ type RefereeListItem = {
   voucher_created_at?: string | null;
 };
 
+export type RefereeAttendance = {
+  registration_id: string;
+  user_id: string;
+  ambassador_id: string;
+  ambassador_code: string;
+  registered_at: string;
+  checked_in_at: string | null;
+  check_in_method: string | null;
+};
+
+export type RefereeCheckInResponse = {
+  status: "checked_in" | "already";
+  registration_id: string;
+  user_id: string;
+  ambassador_code: string;
+  checked_in_at: string;
+  check_in_method: string | null;
+};
+
 export type CampaignRegistrant = {
+  registrationId: string | null;
   userId: string;
   name: string;
   phone: string | null;
@@ -124,12 +155,15 @@ export type CampaignRegistrant = {
   ambassadorCode: string;
   ambassadorName: string;
   registeredAt: string | null;
+  checkedInAt: string | null;
+  checkInMethod: string | null;
 };
 
 export type CampaignDashboard = {
   campaign: Campaign;
   ambassadors: Ambassador[];
   registrants: CampaignRegistrant[];
+  attendanceConnected: boolean;
 };
 
 export function eventRsvpUrl(campaignId: string) {
@@ -144,6 +178,29 @@ export function ambassadorInviteUrl(code: string) {
   return `${APP_URL}/i/${encodeURIComponent(code)}`;
 }
 
+export function refereeQrValue(userId: string) {
+  return `upswell-referee:${userId}`;
+}
+
+export function refereeUserIdFromQr(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("upswell-referee:")) {
+    return trimmed.slice("upswell-referee:".length).trim() || null;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const fromQuery = url.searchParams.get("user_id") ?? url.searchParams.get("userId");
+    if (fromQuery) return fromQuery.trim() || null;
+  } catch {
+    // A raw opaque user id is also accepted for backwards-compatible staff tools.
+  }
+
+  return trimmed;
+}
+
 export async function getCampaign(campaignId: string): Promise<Campaign> {
   return apiGet<Campaign>(
     `/marketing-campaign-events/${encodeURIComponent(campaignId)}`,
@@ -155,6 +212,25 @@ export async function getCampaignAmbassadors(
 ): Promise<Ambassador[]> {
   return apiGet<Ambassador[]>(
     `/internal/marketing-campaigns/${encodeURIComponent(campaignId)}/ambassadors`,
+  );
+}
+
+export async function getCampaignRefereeAttendance(
+  campaignId: string,
+): Promise<RefereeAttendance[]> {
+  return apiGet<RefereeAttendance[]>(
+    `/internal/marketing-campaigns/${encodeURIComponent(campaignId)}/referees/attendance`,
+  );
+}
+
+export async function checkInCampaignReferee(
+  campaignId: string,
+  userId: string,
+  method: "qr" | "manual",
+): Promise<RefereeCheckInResponse> {
+  return apiPost<RefereeCheckInResponse>(
+    `/internal/marketing-campaigns/${encodeURIComponent(campaignId)}/referees/${encodeURIComponent(userId)}/check-in`,
+    { method },
   );
 }
 
@@ -184,13 +260,21 @@ async function getRefereesForCohort(cohortId: string) {
 export async function getCampaignDashboard(
   campaignId: string,
 ): Promise<CampaignDashboard> {
-  const [campaign, ambassadors] = await Promise.all([
+  const [campaign, ambassadors, attendanceResult] = await Promise.all([
     getCampaign(campaignId),
     getCampaignAmbassadors(campaignId),
+    getCampaignRefereeAttendance(campaignId)
+      .then((rows) => ({ rows, connected: true as const }))
+      .catch(() => ({ rows: [] as RefereeAttendance[], connected: false as const })),
   ]);
 
   if (ambassadors.length === 0) {
-    return { campaign, ambassadors: [], registrants: [] };
+    return {
+      campaign,
+      ambassadors: [],
+      registrants: [],
+      attendanceConnected: attendanceResult.connected,
+    };
   }
 
   const details = await Promise.all(
@@ -199,11 +283,15 @@ export async function getCampaignDashboard(
     ),
   );
 
-  const cohorts = [...new Set(ambassadors.map((row) => row.cohort_id).filter(Boolean))];
+  const cohorts = [
+    ...new Set(ambassadors.map((row) => row.cohort_id).filter(Boolean)),
+  ];
   const refereePages = await Promise.all(
     cohorts.map((cohort) => getRefereesForCohort(cohort).catch(() => [])),
   );
-  const ambassadorCodes = new Set(ambassadors.map((row) => row.ambassador_code));
+  const ambassadorCodes = new Set(
+    ambassadors.map((row) => row.ambassador_code),
+  );
   const refereeRows = refereePages
     .flat()
     .filter((row) => ambassadorCodes.has(row.ambassador_code));
@@ -211,6 +299,12 @@ export async function getCampaignDashboard(
   const publicByKey = new Map(
     refereeRows.map((row) => [`${row.ambassador_code}:${row.user_id}`, row]),
   );
+  const attendanceByKey = new Map<string, RefereeAttendance>();
+  for (const row of attendanceResult.rows) {
+    const key = `${row.ambassador_code}:${row.user_id}`;
+    if (!attendanceByKey.has(key)) attendanceByKey.set(key, row);
+  }
+
   const registrants: CampaignRegistrant[] = [];
   const seen = new Set<string>();
 
@@ -222,15 +316,22 @@ export async function getCampaignDashboard(
       if (seen.has(key)) continue;
       seen.add(key);
       const publicRow = publicByKey.get(key);
+      const attendance = attendanceByKey.get(key);
       registrants.push({
+        registrationId: attendance?.registration_id ?? null,
         userId: referee.user_id,
         name: publicRow?.name || "Registered student",
         phone: publicRow?.phone_number ?? null,
         email: publicRow?.email ?? null,
         ambassadorCode: code,
         ambassadorName:
-          publicRow?.referrer_name || detail.ambassador.public_name || "Ambassador",
-        registeredAt: referee.registered_at ?? null,
+          publicRow?.referrer_name ||
+          detail.ambassador.public_name ||
+          "Ambassador",
+        registeredAt:
+          attendance?.registered_at ?? referee.registered_at ?? null,
+        checkedInAt: attendance?.checked_in_at ?? null,
+        checkInMethod: attendance?.check_in_method ?? null,
       });
     }
   }
@@ -239,14 +340,40 @@ export async function getCampaignDashboard(
     const key = `${row.ambassador_code}:${row.user_id}`;
     if (seen.has(key)) continue;
     seen.add(key);
+    const attendance = attendanceByKey.get(key);
     registrants.push({
+      registrationId: attendance?.registration_id ?? null,
       userId: row.user_id,
       name: row.name || "Registered student",
       phone: row.phone_number ?? null,
       email: row.email ?? null,
       ambassadorCode: row.ambassador_code,
       ambassadorName: row.referrer_name || "Ambassador",
-      registeredAt: row.voucher_created_at ?? null,
+      registeredAt:
+        attendance?.registered_at ?? row.voucher_created_at ?? null,
+      checkedInAt: attendance?.checked_in_at ?? null,
+      checkInMethod: attendance?.check_in_method ?? null,
+    });
+  }
+
+  for (const attendance of attendanceResult.rows) {
+    const key = `${attendance.ambassador_code}:${attendance.user_id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const ambassador = ambassadors.find(
+      (row) => row.ambassador_code === attendance.ambassador_code,
+    );
+    registrants.push({
+      registrationId: attendance.registration_id,
+      userId: attendance.user_id,
+      name: "Registered student",
+      phone: null,
+      email: null,
+      ambassadorCode: attendance.ambassador_code,
+      ambassadorName: ambassador?.public_name || "Ambassador",
+      registeredAt: attendance.registered_at,
+      checkedInAt: attendance.checked_in_at,
+      checkInMethod: attendance.check_in_method,
     });
   }
 
@@ -254,5 +381,10 @@ export async function getCampaignDashboard(
     (b.registeredAt ?? "").localeCompare(a.registeredAt ?? ""),
   );
 
-  return { campaign, ambassadors, registrants };
+  return {
+    campaign,
+    ambassadors,
+    registrants,
+    attendanceConnected: attendanceResult.connected,
+  };
 }
